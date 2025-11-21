@@ -10,6 +10,10 @@ const apiLimiter = require('./middleware/rateLimiter');
 
 const app = express();
 
+// Trust proxy - needed for Render, Heroku, and other proxies
+// This enables rate limiting to work correctly behind proxies
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 

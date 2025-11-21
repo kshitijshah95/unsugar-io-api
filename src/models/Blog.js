@@ -55,10 +55,15 @@ const blogSchema = new mongoose.Schema({
   timestamps: true // Adds createdAt and updatedAt
 });
 
-// Index for better query performance
+// Indexes for better query performance
 blogSchema.index({ tags: 1 });
 blogSchema.index({ author: 1 });
 blogSchema.index({ publishedDate: -1 });
+
+// Compound indexes for common query patterns
+blogSchema.index({ status: 1, publishedDate: -1 });
+blogSchema.index({ status: 1, tags: 1 });
+blogSchema.index({ status: 1, author: 1 });
 
 const Blog = mongoose.model('Blog', blogSchema);
 

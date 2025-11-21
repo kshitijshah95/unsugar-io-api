@@ -1,6 +1,60 @@
 const express = require('express');
 const router = express.Router();
 const Blog = require('../models/Blog');
+const { sanitizeRegexInput, sanitizePagination, sanitizeSort } = require('../utils/sanitize');
+const config = require('../config/config');
+
+/**
+ * GET /api/v1/blogs/tags/all
+ * Get all unique tags
+ * IMPORTANT: This must be BEFORE /:id route to avoid matching 'tags' as an ID
+ */
+router.get('/tags/all', async (req, res) => {
+  try {
+    // Use MongoDB aggregation to get unique tags
+    const allTags = await Blog.distinct('tags', { status: 'published' });
+
+    res.json({
+      success: true,
+      data: allTags.sort()
+    });
+  } catch (error) {
+    console.error('Error fetching tags:', error);
+    res.status(500).json({
+      success: false,
+      error: config.nodeEnv === 'development' ? error.message : 'Failed to fetch tags'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/blogs/slug/:slug
+ * Get a single blog by slug
+ * IMPORTANT: This must be BEFORE /:id route to avoid slug matching as ID
+ */
+router.get('/slug/:slug', async (req, res) => {
+  try {
+    const blog = await Blog.findOne({ slug: req.params.slug, status: 'published' }).lean();
+
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        error: 'Blog not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: blog
+    });
+  } catch (error) {
+    console.error('Error fetching blog by slug:', error);
+    res.status(500).json({
+      success: false,
+      error: config.nodeEnv === 'development' ? error.message : 'Failed to fetch blog'
+    });
+  }
+});
 
 /**
  * GET /api/v1/blogs
@@ -13,32 +67,34 @@ router.get('/', async (req, res) => {
     // Build query
     const query = { status: 'published' };
 
-    // Filter by tag
+    // Filter by tag (with input sanitization)
     if (tag) {
-      query.tags = { $in: [new RegExp(tag, 'i')] };
+      const sanitizedTag = sanitizeRegexInput(tag);
+      query.tags = { $in: [new RegExp(sanitizedTag, 'i')] };
     }
 
-    // Filter by author
+    // Filter by author (with input sanitization)
     if (author) {
-      query.author = { $regex: author, $options: 'i' };
+      const sanitizedAuthor = sanitizeRegexInput(author);
+      query.author = { $regex: sanitizedAuthor, $options: 'i' };
     }
 
-    // Search in title and excerpt
+    // Search in title and excerpt (with input sanitization)
     if (search) {
+      const sanitizedSearch = sanitizeRegexInput(search);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { excerpt: { $regex: search, $options: 'i' } }
+        { title: { $regex: sanitizedSearch, $options: 'i' } },
+        { excerpt: { $regex: sanitizedSearch, $options: 'i' } }
       ];
     }
 
-    // Pagination
-    const pageNum = parseInt(page);
-    const limitNum = Math.min(parseInt(limit), 50); // Max 50 items per page
+    // Sanitize pagination
+    const { pageNum, limitNum } = sanitizePagination(page, limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // Sorting
-    const sortOrder = order === 'asc' ? 1 : -1;
-    const sortField = sort === 'title' ? 'title' : 'publishedDate';
+    // Sanitize sorting
+    const { sortField, sortOrder: validatedOrder } = sanitizeSort(sort, order);
+    const sortOrder = validatedOrder === 'asc' ? 1 : -1;
 
     // Execute query
     const [blogs, total] = await Promise.all([
@@ -63,7 +119,7 @@ router.get('/', async (req, res) => {
     console.error('Error fetching blogs:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch blogs'
+      error: config.nodeEnv === 'development' ? error.message : 'Failed to fetch blogs'
     });
   }
 });
@@ -91,59 +147,10 @@ router.get('/:id', async (req, res) => {
     console.error('Error fetching blog:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch blog'
+      error: config.nodeEnv === 'development' ? error.message : 'Failed to fetch blog'
     });
   }
 });
 
-/**
- * GET /api/v1/blogs/slug/:slug
- * Get a single blog by slug
- */
-router.get('/slug/:slug', async (req, res) => {
-  try {
-    const blog = await Blog.findOne({ slug: req.params.slug, status: 'published' }).lean();
-
-    if (!blog) {
-      return res.status(404).json({
-        success: false,
-        error: 'Blog not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: blog
-    });
-  } catch (error) {
-    console.error('Error fetching blog by slug:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch blog'
-    });
-  }
-});
-
-/**
- * GET /api/v1/blogs/tags/all
- * Get all unique tags
- */
-router.get('/tags/all', async (req, res) => {
-  try {
-    // Use MongoDB aggregation to get unique tags
-    const allTags = await Blog.distinct('tags', { status: 'published' });
-
-    res.json({
-      success: true,
-      data: allTags.sort()
-    });
-  } catch (error) {
-    console.error('Error fetching tags:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch tags'
-    });
-  }
-});
 
 module.exports = router;

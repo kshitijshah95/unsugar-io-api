@@ -2,8 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const passport = require('./config/passport');
 const config = require('./config/config');
 const blogRoutes = require('./routes/blogs');
+const authRoutes = require('./routes/auth');
 const errorHandler = require('./middleware/errorHandler');
 const notFound = require('./middleware/notFound');
 const apiLimiter = require('./middleware/rateLimiter');
@@ -37,6 +40,10 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Passport middleware
+app.use(passport.initialize());
 
 // Logging middleware
 if (config.nodeEnv === 'development') {
@@ -58,6 +65,7 @@ app.get('/health', (req, res) => {
 app.use('/api/', apiLimiter);
 
 // API routes with versioning
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/blogs', blogRoutes);
 
 // 404 handler

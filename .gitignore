@@ -1,5 +1,12 @@
 node_modules/
+
+# Environment files (local overrides)
 .env
+.env.local
+
+# Note: .env.development and .env.production are tracked in git
+# Note: .env.example is tracked as a template
+
 .DS_Store
 *.log
 npm-debug.log*

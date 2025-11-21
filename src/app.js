@@ -8,8 +8,7 @@ const config = require('./config/config');
 const blogRoutes = require('./routes/blogs');
 const authRoutes = require('./routes/auth');
 const blogTrackingRoutes = require('./routes/blogTracking');
-const errorHandler = require('./middleware/errorHandler');
-const notFound = require('./middleware/notFound');
+const { errorHandler, notFound } = require('./middleware/errorHandler');
 const apiLimiter = require('./middleware/rateLimiter');
 
 const app = express();

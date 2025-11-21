@@ -47,7 +47,7 @@ router.post('/register',
     body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
     body('password')
       .isLength({ min: 12 }).withMessage('Password must be at least 12 characters')
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/)
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?])/)
       .withMessage('Password must contain uppercase, lowercase, number, and special character'),
     body('name').trim().notEmpty().withMessage('Name is required')
   ],

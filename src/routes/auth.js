@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const passport = require('../config/passport');
 const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { authenticate } = require('../middleware/auth');

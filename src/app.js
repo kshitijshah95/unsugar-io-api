@@ -7,6 +7,7 @@ const passport = require('./config/passport');
 const config = require('./config/config');
 const blogRoutes = require('./routes/blogs');
 const authRoutes = require('./routes/auth');
+const blogTrackingRoutes = require('./routes/blogTracking');
 const errorHandler = require('./middleware/errorHandler');
 const notFound = require('./middleware/notFound');
 const apiLimiter = require('./middleware/rateLimiter');
@@ -67,6 +68,7 @@ app.use('/api/', apiLimiter);
 // API routes with versioning
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/blogs', blogRoutes);
+app.use('/api/v1', blogTrackingRoutes);
 
 // 404 handler
 app.use(notFound);

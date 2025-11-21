@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../utils/jwt');
 const User = require('../models/User');
+const { AuthenticationError } = require('./errorHandler');
 
 /**
  * Verify JWT token and attach user to request
@@ -10,10 +11,7 @@ const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'No token provided'
-      });
+      throw new AuthenticationError('No token provided');
     }
     
     const token = authHeader.split(' ')[1];
@@ -25,28 +23,20 @@ const authenticate = async (req, res, next) => {
     const user = await User.findById(decoded.userId).select('-password');
     
     if (!user || !user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found or inactive'
-      });
+      throw new AuthenticationError('User not found or inactive');
     }
     
     // Check if password was changed after token was issued
     if (user.changedPasswordAfter(decoded.iat)) {
-      return res.status(401).json({
-        success: false,
-        message: 'Password recently changed. Please login again.'
-      });
+      throw new AuthenticationError('Password recently changed. Please login again.');
     }
     
     // Attach user to request
     req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: error.message || 'Invalid token'
-    });
+    // Pass error to error handler middleware
+    next(error);
   }
 };
 
@@ -81,21 +71,20 @@ const authenticateOptional = async (req, res, next) => {
  */
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authenticated'
-      });
+    try {
+      if (!req.user) {
+        throw new AuthenticationError('Not authenticated');
+      }
+      
+      if (!roles.includes(req.user.role)) {
+        const { AuthorizationError } = require('./errorHandler');
+        throw new AuthorizationError('Insufficient permissions');
+      }
+      
+      next();
+    } catch (error) {
+      next(error);
     }
-    
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Insufficient permissions'
-      });
-    }
-    
-    next();
   };
 };
 

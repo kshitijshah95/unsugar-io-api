@@ -5,6 +5,7 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { authenticate } = require('../middleware/auth');
+const { isFeatureEnabled } = require('../config/features');
 
 /**
  * @route   POST /api/v1/auth/register
@@ -278,6 +279,15 @@ router.patch('/profile', authenticate,
  * @access  Public
  */
 router.get('/google',
+  (req, res, next) => {
+    if (!isFeatureEnabled('enableGoogleSSO')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Google SSO is currently disabled'
+      });
+    }
+    next();
+  },
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false
@@ -290,6 +300,15 @@ router.get('/google',
  * @access  Public
  */
 router.get('/google/callback',
+  (req, res, next) => {
+    if (!isFeatureEnabled('enableGoogleSSO')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Google SSO is currently disabled'
+      });
+    }
+    next();
+  },
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
@@ -319,6 +338,15 @@ router.get('/google/callback',
  * @access  Public
  */
 router.get('/github',
+  (req, res, next) => {
+    if (!isFeatureEnabled('enableGitHubSSO')) {
+      return res.status(403).json({
+        success: false,
+        message: 'GitHub SSO is currently disabled'
+      });
+    }
+    next();
+  },
   passport.authenticate('github', {
     scope: ['user:email'],
     session: false
@@ -331,6 +359,15 @@ router.get('/github',
  * @access  Public
  */
 router.get('/github/callback',
+  (req, res, next) => {
+    if (!isFeatureEnabled('enableGitHubSSO')) {
+      return res.status(403).json({
+        success: false,
+        message: 'GitHub SSO is currently disabled'
+      });
+    }
+    next();
+  },
   passport.authenticate('github', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {

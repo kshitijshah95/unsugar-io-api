@@ -1,82 +1,66 @@
 const express = require('express');
 const router = express.Router();
-const blogs = require('../data/blogs');
+const Blog = require('../models/Blog');
 
 /**
- * GET /api/blogs
- * Get all blogs with optional filtering
+ * GET /api/v1/blogs
+ * Get all blogs with optional filtering, pagination, and sorting
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { tag, author, search, page = 1, limit = 10, sort = 'publishedDate', order = 'desc' } = req.query;
-    let filteredBlogs = [...blogs];
+    
+    // Build query
+    const query = { status: 'published' };
 
     // Filter by tag
     if (tag) {
-      filteredBlogs = filteredBlogs.filter(blog =>
-        blog.tags.some(t => t.toLowerCase() === tag.toLowerCase())
-      );
+      query.tags = { $in: [new RegExp(tag, 'i')] };
     }
 
     // Filter by author
     if (author) {
-      filteredBlogs = filteredBlogs.filter(blog =>
-        blog.author.toLowerCase().includes(author.toLowerCase())
-      );
+      query.author = { $regex: author, $options: 'i' };
     }
 
     // Search in title and excerpt
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredBlogs = filteredBlogs.filter(blog =>
-        blog.title.toLowerCase().includes(searchLower) ||
-        blog.excerpt.toLowerCase().includes(searchLower)
-      );
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { excerpt: { $regex: search, $options: 'i' } }
+      ];
     }
-
-    // Sorting
-    filteredBlogs.sort((a, b) => {
-      if (sort === 'publishedDate') {
-        const dateA = new Date(a.publishedDate);
-        const dateB = new Date(b.publishedDate);
-        return order === 'asc' ? dateA - dateB : dateB - dateA;
-      } else if (sort === 'title') {
-        return order === 'asc' 
-          ? a.title.localeCompare(b.title)
-          : b.title.localeCompare(a.title);
-      }
-      return 0;
-    });
 
     // Pagination
     const pageNum = parseInt(page);
     const limitNum = Math.min(parseInt(limit), 50); // Max 50 items per page
-    const startIndex = (pageNum - 1) * limitNum;
-    const endIndex = startIndex + limitNum;
-    const paginatedBlogs = filteredBlogs.slice(startIndex, endIndex);
+    const skip = (pageNum - 1) * limitNum;
 
-    // Return only preview data (without full content)
-    const blogsPreview = paginatedBlogs.map(blog => ({
-      id: blog.id,
-      slug: blog.slug,
-      title: blog.title,
-      excerpt: blog.excerpt,
-      author: blog.author,
-      publishedDate: blog.publishedDate,
-      readTime: blog.readTime,
-      tags: blog.tags,
-      thumbnail: blog.thumbnail
-    }));
+    // Sorting
+    const sortOrder = order === 'asc' ? 1 : -1;
+    const sortField = sort === 'title' ? 'title' : 'publishedDate';
+
+    // Execute query
+    const [blogs, total] = await Promise.all([
+      Blog.find(query)
+        .select('-content') // Exclude content for list view
+        .sort({ [sortField]: sortOrder })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(), // Convert to plain JavaScript objects
+      Blog.countDocuments(query)
+    ]);
 
     res.json({
       success: true,
-      count: blogsPreview.length,
-      total: filteredBlogs.length,
+      count: blogs.length,
+      total,
       page: pageNum,
-      totalPages: Math.ceil(filteredBlogs.length / limitNum),
-      data: blogsPreview
+      totalPages: Math.ceil(total / limitNum),
+      data: blogs
     });
   } catch (error) {
+    console.error('Error fetching blogs:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch blogs'
@@ -85,12 +69,12 @@ router.get('/', (req, res) => {
 });
 
 /**
- * GET /api/blogs/:id
+ * GET /api/v1/blogs/:id
  * Get a single blog by ID
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const blog = blogs.find(b => b.id === req.params.id);
+    const blog = await Blog.findOne({ id: req.params.id, status: 'published' }).lean();
 
     if (!blog) {
       return res.status(404).json({
@@ -104,6 +88,7 @@ router.get('/:id', (req, res) => {
       data: blog
     });
   } catch (error) {
+    console.error('Error fetching blog:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch blog'
@@ -112,12 +97,12 @@ router.get('/:id', (req, res) => {
 });
 
 /**
- * GET /api/blogs/slug/:slug
+ * GET /api/v1/blogs/slug/:slug
  * Get a single blog by slug
  */
-router.get('/slug/:slug', (req, res) => {
+router.get('/slug/:slug', async (req, res) => {
   try {
-    const blog = blogs.find(b => b.slug === req.params.slug);
+    const blog = await Blog.findOne({ slug: req.params.slug, status: 'published' }).lean();
 
     if (!blog) {
       return res.status(404).json({
@@ -131,6 +116,7 @@ router.get('/slug/:slug', (req, res) => {
       data: blog
     });
   } catch (error) {
+    console.error('Error fetching blog by slug:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch blog'
@@ -139,25 +125,20 @@ router.get('/slug/:slug', (req, res) => {
 });
 
 /**
- * GET /api/blogs/tags/all
+ * GET /api/v1/blogs/tags/all
  * Get all unique tags
  */
-router.get('/tags/all', (req, res) => {
+router.get('/tags/all', async (req, res) => {
   try {
-    const allTags = blogs.reduce((tags, blog) => {
-      blog.tags.forEach(tag => {
-        if (!tags.includes(tag)) {
-          tags.push(tag);
-        }
-      });
-      return tags;
-    }, []);
+    // Use MongoDB aggregation to get unique tags
+    const allTags = await Blog.distinct('tags', { status: 'published' });
 
     res.json({
       success: true,
       data: allTags.sort()
     });
   } catch (error) {
+    console.error('Error fetching tags:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch tags'

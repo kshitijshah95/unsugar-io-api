@@ -97,9 +97,16 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     },
     expiresAt: Date,
-    device: String,
+    userAgent: String,
     ipAddress: String
   }],
+  
+  // Account Security - Lockout
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockUntil: Date,
   
   // Timestamps
   lastLogin: Date,
@@ -109,11 +116,19 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-userSchema.index({ email: 1 });
+userSchema.index({ email: 1 }); // Already unique, but explicit index
 userSchema.index({ googleId: 1 }, { sparse: true });
 userSchema.index({ githubId: 1 }, { sparse: true });
 userSchema.index({ appleId: 1 }, { sparse: true });
 userSchema.index({ createdAt: -1 });
+// Compound index for active users by role
+userSchema.index({ isActive: 1, role: 1 });
+// Index for refresh token lookup
+userSchema.index({ 'refreshTokens.token': 1 });
+// Index for cleaning up expired tokens
+userSchema.index({ 'refreshTokens.expiresAt': 1 });
+// Index for account lockout queries
+userSchema.index({ lockUntil: 1 }, { sparse: true });
 
 /**
  * Hash password before saving
@@ -241,6 +256,49 @@ userSchema.methods.cleanupExpiredTokens = function() {
 };
 
 /**
+ * Virtual to check if account is locked
+ */
+userSchema.virtual('isLocked').get(function() {
+  return !!(this.lockUntil && this.lockUntil > Date.now());
+});
+
+/**
+ * Increment login attempts and lock if needed
+ */
+userSchema.methods.incLoginAttempts = function() {
+  // If lock has expired, restart at 1
+  if (this.lockUntil && this.lockUntil < Date.now()) {
+    return this.updateOne({
+      $set: { loginAttempts: 1 },
+      $unset: { lockUntil: 1 },
+    });
+  }
+  
+  // Increment attempts
+  const updates = { $inc: { loginAttempts: 1 } };
+  
+  // Lock account after 5 failed attempts
+  const maxAttempts = 5;
+  const lockTime = 2 * 60 * 60 * 1000; // 2 hours
+  
+  if (this.loginAttempts + 1 >= maxAttempts && !this.isLocked) {
+    updates.$set = { lockUntil: Date.now() + lockTime };
+  }
+  
+  return this.updateOne(updates);
+};
+
+/**
+ * Reset login attempts on successful login
+ */
+userSchema.methods.resetLoginAttempts = function() {
+  return this.updateOne({
+    $set: { loginAttempts: 0 },
+    $unset: { lockUntil: 1 },
+  });
+};
+
+/**
  * Get safe user object (without sensitive data)
  */
 userSchema.methods.toJSON = function() {
@@ -248,6 +306,8 @@ userSchema.methods.toJSON = function() {
   
   delete user.password;
   delete user.refreshTokens;
+  delete user.loginAttempts;
+  delete user.lockUntil;
   delete user.__v;
   
   // Clean OAuth provider data

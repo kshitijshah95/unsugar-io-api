@@ -1,11 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('../config/passport');
-const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { authenticate } = require('../middleware/auth');
 const { isFeatureEnabled } = require('../config/features');
+const {
+  asyncHandler,
+  ValidationError,
+  AuthenticationError,
+  NotFoundError,
+  ConflictError,
+} = require('../middleware/errorHandler');
+const { validate, schemas } = require('../middleware/validation');
+
+// Constants
+const ACCESS_TOKEN_EXPIRY = 15 * 60; // 15 minutes in seconds
+const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60; // 7 days in seconds
+
+// Rate limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per window
+  message: 'Too many authentication attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const strictAuthLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 requests per hour
+  message: 'Too many failed attempts, please try again later',
+  skipSuccessfulRequests: true,
+});
 
 /**
  * @route   POST /api/v1/auth/register
